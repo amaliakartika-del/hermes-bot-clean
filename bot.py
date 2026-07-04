@@ -170,37 +170,53 @@ TOOLS = [
 
 async def tool_web_search(query: str) -> str:
     try:
-        url = f"https://api.duckduckgo.com/?q={httpx.QueryParams({'q': query})}&format=json&no_redirect=1&no_html=1"
-        async with httpx.AsyncClient(timeout=10) as client:
-            r = await client.get(
-                "https://api.duckduckgo.com/",
-                params={"q": query, "format": "json", "no_redirect": "1", "no_html": "1", "kl": "id-id"}
-            )
-            data = r.json()
+        from duckduckgo_search import DDGS
+        import asyncio
 
-        results = []
+        def do_search():
+            results = []
+            with DDGS() as ddgs:
+                # Coba news search dulu
+                news = list(ddgs.news(query, max_results=5))
+                if news:
+                    results.append(f"*Berita terbaru tentang '{query}':*\n")
+                    for i, item in enumerate(news, 1):
+                        title = item.get("title", "Tanpa judul")
+                        url   = item.get("url", "")
+                        body  = item.get("body", "")[:200]
+                        date  = item.get("date", "")
+                        results.append(
+                            f"{i}. *{title}*\n"
+                            f"   {body}...\n"
+                            f"   Tanggal: {date}\n"
+                            f"   Link: {url}\n"
+                        )
+                    return "\n".join(results)
 
-        # Abstract (definisi langsung)
-        if data.get("Abstract"):
-            results.append(f"**Ringkasan:** {data['Abstract']}")
-            if data.get("AbstractURL"):
-                results.append(f"Sumber: {data['AbstractURL']}")
+                # Fallback ke web search biasa
+                web = list(ddgs.text(query, max_results=5))
+                if web:
+                    results.append(f"*Hasil pencarian '{query}':*\n")
+                    for i, item in enumerate(web, 1):
+                        title = item.get("title", "Tanpa judul")
+                        url   = item.get("href", "")
+                        body  = item.get("body", "")[:200]
+                        results.append(
+                            f"{i}. *{title}*\n"
+                            f"   {body}...\n"
+                            f"   Link: {url}\n"
+                        )
+                    return "\n".join(results)
 
-        # Related topics
-        topics = data.get("RelatedTopics", [])[:5]
-        if topics:
-            results.append("\n**Hasil terkait:**")
-            for t in topics:
-                if isinstance(t, dict) and t.get("Text"):
-                    results.append(f"- {t['Text'][:200]}")
+                return f"Tidak ada hasil untuk '{query}'."
 
-        if not results:
-            return f"Tidak ada hasil ditemukan untuk '{query}'. Coba kata kunci lain."
-
-        return "\n".join(results)
+        loop = asyncio.get_event_loop()
+        result = await loop.run_in_executor(None, do_search)
+        return result
 
     except Exception as e:
         return f"Error pencarian web: {str(e)}"
+
 
 
 async def tool_wikipedia(topic: str, language: str = "id") -> str:
