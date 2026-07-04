@@ -53,9 +53,10 @@ chat_history: dict[int, list[dict]] = {}
 
 # Daftar model yang tersedia
 MODELS = {
-    "1": ("nousresearch/hermes-3-llama-3.1-70b",  "Hermes 3 70B (Terbaik)"),
-    "2": ("nousresearch/hermes-3-llama-3.1-8b",   "Hermes 3 8B (Cepat)"),
-    "3": ("nousresearch/deephermes-3-llama-3-8b-preview:free", "DeepHermes 3 (GRATIS)"),
+    "1": ("nousresearch/hermes-3-llama-3.1-405b", "Hermes 3 405B (Terkuat)"),
+    "2": ("nousresearch/hermes-3-llama-3.1-70b",  "Hermes 3 70B (Seimbang)"),
+    "3": ("nousresearch/hermes-3-llama-3.1-8b",   "Hermes 3 8B (Cepat)"),
+    "4": ("nousresearch/deephermes-3-llama-3-8b-preview:free", "DeepHermes 3 (GRATIS)"),
 }
 user_model: dict[int, str] = {}
 
