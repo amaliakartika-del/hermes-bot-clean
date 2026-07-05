@@ -39,7 +39,9 @@ SYSTEM_PROMPT    = os.getenv(
     "SYSTEM_PROMPT",
     "Kamu adalah Hermes, AI Agent cerdas dari Nous Research. "
     "Kamu bisa menggunakan tools untuk mencari informasi, menghitung, dan menjawab pertanyaan. "
-    "Selalu gunakan tools jika diperlukan untuk memberikan jawaban yang akurat dan terkini. "
+    "PENTING: Selalu gunakan tool web_search atau news_search ketika ditanya tentang berita, informasi terkini, atau fakta. "
+    "WAJIB: Selalu sertakan link/URL sumber dalam jawabanmu jika tersedia dari hasil pencarian. "
+    "Format link seperti ini: [Judul Artikel](URL). "
     "Jawab dalam Bahasa Indonesia kecuali diminta bahasa lain."
 )
 
@@ -74,15 +76,27 @@ TOOLS = [
     {
         "type": "function",
         "function": {
-            "name": "web_search",
-            "description": "Cari informasi terbaru di internet menggunakan DuckDuckGo. Gunakan tool ini untuk berita terkini, fakta, atau informasi yang mungkin berubah.",
+            "name": "news_search",
+            "description": "Cari berita terbaru dari Google News. Selalu gunakan tool ini untuk pertanyaan tentang berita, kejadian terkini, dan informasi hari ini. Mengembalikan judul, ringkasan, tanggal, dan LINK berita.",
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "query": {
-                        "type": "string",
-                        "description": "Kata kunci pencarian"
-                    }
+                    "query": {"type": "string", "description": "Kata kunci berita"},
+                    "language": {"type": "string", "description": "Kode bahasa: 'id' Indonesia, 'en' Inggris", "default": "id"}
+                },
+                "required": ["query"]
+            }
+        }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "web_search",
+            "description": "Cari informasi umum di internet. Mengembalikan hasil pencarian dengan judul, deskripsi, dan LINK sumber.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "query": {"type": "string", "description": "Kata kunci pencarian"}
                 },
                 "required": ["query"]
             }
@@ -92,19 +106,12 @@ TOOLS = [
         "type": "function",
         "function": {
             "name": "wikipedia_search",
-            "description": "Cari ringkasan artikel dari Wikipedia. Gunakan untuk informasi umum, definisi, atau penjelasan topik.",
+            "description": "Cari ringkasan artikel dari Wikipedia untuk informasi umum, definisi, atau penjelasan topik.",
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "topic": {
-                        "type": "string",
-                        "description": "Topik yang ingin dicari di Wikipedia"
-                    },
-                    "language": {
-                        "type": "string",
-                        "description": "Kode bahasa Wikipedia: 'id' untuk Indonesia, 'en' untuk Inggris",
-                        "default": "id"
-                    }
+                    "topic": {"type": "string", "description": "Topik yang dicari"},
+                    "language": {"type": "string", "description": "Kode bahasa: 'id' atau 'en'", "default": "id"}
                 },
                 "required": ["topic"]
             }
@@ -114,14 +121,11 @@ TOOLS = [
         "type": "function",
         "function": {
             "name": "calculator",
-            "description": "Hitung ekspresi matematika. Mendukung operasi dasar, trigonometri, logaritma, dll.",
+            "description": "Hitung ekspresi matematika. Mendukung operasi dasar, trigonometri, logaritma.",
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "expression": {
-                        "type": "string",
-                        "description": "Ekspresi matematika yang akan dihitung. Contoh: '2**10', 'math.sqrt(144)', 'math.sin(math.pi/2)'"
-                    }
+                    "expression": {"type": "string", "description": "Ekspresi matematika, contoh: '2**10', 'math.sqrt(144)'"}
                 },
                 "required": ["expression"]
             }
@@ -131,15 +135,11 @@ TOOLS = [
         "type": "function",
         "function": {
             "name": "get_datetime",
-            "description": "Dapatkan tanggal dan waktu saat ini di zona waktu tertentu.",
+            "description": "Dapatkan tanggal dan waktu saat ini.",
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "timezone": {
-                        "type": "string",
-                        "description": "Zona waktu. Contoh: 'Asia/Jakarta', 'UTC', 'Asia/Tokyo'",
-                        "default": "Asia/Jakarta"
-                    }
+                    "timezone": {"type": "string", "description": "Zona waktu, contoh: 'Asia/Jakarta'", "default": "Asia/Jakarta"}
                 }
             }
         }
@@ -148,14 +148,11 @@ TOOLS = [
         "type": "function",
         "function": {
             "name": "read_url",
-            "description": "Baca dan ambil konten dari sebuah URL/website.",
+            "description": "Baca konten dari sebuah URL/website.",
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "url": {
-                        "type": "string",
-                        "description": "URL yang ingin dibaca"
-                    }
+                    "url": {"type": "string", "description": "URL yang ingin dibaca"}
                 },
                 "required": ["url"]
             }
@@ -168,51 +165,82 @@ TOOLS = [
 #  TOOL IMPLEMENTATIONS
 # ═══════════════════════════════════════════════
 
-async def tool_web_search(query: str) -> str:
+async def tool_news_search(query: str, language: str = "id") -> str:
+    """Cari berita via Google News RSS - selalu return link asli."""
     try:
-        from duckduckgo_search import DDGS
-        import asyncio
+        import xml.etree.ElementTree as ET
+        import urllib.parse
 
-        def do_search():
-            results = []
-            with DDGS() as ddgs:
-                # Coba news search dulu
-                news = list(ddgs.news(query, max_results=5))
-                if news:
-                    results.append(f"*Berita terbaru tentang '{query}':*\n")
-                    for i, item in enumerate(news, 1):
-                        title = item.get("title", "Tanpa judul")
-                        url   = item.get("url", "")
-                        body  = item.get("body", "")[:200]
-                        date  = item.get("date", "")
-                        results.append(
-                            f"{i}. *{title}*\n"
-                            f"   {body}...\n"
-                            f"   Tanggal: {date}\n"
-                            f"   Link: {url}\n"
-                        )
-                    return "\n".join(results)
+        lang_map = {"id": ("id", "ID", "ID:id"), "en": ("en", "US", "en-US:en")}
+        hl, gl, ceid = lang_map.get(language, ("id", "ID", "ID:id"))
+        encoded = urllib.parse.quote(query)
+        url = f"https://news.google.com/rss/search?q={encoded}&hl={hl}&gl={gl}&ceid={ceid}"
 
-                # Fallback ke web search biasa
-                web = list(ddgs.text(query, max_results=5))
-                if web:
-                    results.append(f"*Hasil pencarian '{query}':*\n")
-                    for i, item in enumerate(web, 1):
-                        title = item.get("title", "Tanpa judul")
-                        url   = item.get("href", "")
-                        body  = item.get("body", "")[:200]
-                        results.append(
-                            f"{i}. *{title}*\n"
-                            f"   {body}...\n"
-                            f"   Link: {url}\n"
-                        )
-                    return "\n".join(results)
+        async with httpx.AsyncClient(timeout=15, follow_redirects=True,
+                                     headers={"User-Agent": "Mozilla/5.0"}) as client:
+            r = await client.get(url)
+            r.raise_for_status()
 
-                return f"Tidak ada hasil untuk '{query}'."
+        root = ET.fromstring(r.content)
+        items = root.findall(".//item")[:6]
 
-        loop = asyncio.get_event_loop()
-        result = await loop.run_in_executor(None, do_search)
-        return result
+        if not items:
+            return f"Tidak ada berita ditemukan untuk '{query}'."
+
+        lines = [f"*Berita terbaru: '{query}'*\n"]
+        for i, item in enumerate(items, 1):
+            title   = item.findtext("title", "Tanpa judul")
+            link    = item.findtext("link", "")
+            pubdate = item.findtext("pubDate", "")[:16]
+            source  = item.findtext("source", "")
+            # Bersihkan judul dari nama sumber
+            if " - " in title:
+                title = title.rsplit(" - ", 1)[0].strip()
+            lines.append(
+                f"{i}. *{title}*\n"
+                f"   Sumber: {source} | {pubdate}\n"
+                f"   Link: {link}\n"
+            )
+        return "\n".join(lines)
+
+    except Exception as e:
+        return f"Error pencarian berita: {str(e)}"
+
+
+async def tool_web_search(query: str) -> str:
+    """Cari info umum via Brave Search API (tanpa API key, pakai endpoint publik)."""
+    try:
+        import urllib.parse
+        encoded = urllib.parse.quote(query)
+        # Gunakan DuckDuckGo HTML endpoint
+        url = f"https://html.duckduckgo.com/html/?q={encoded}"
+        async with httpx.AsyncClient(timeout=15, follow_redirects=True,
+                                     headers={"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"}) as client:
+            r = await client.post("https://html.duckduckgo.com/html/", data={"q": query})
+
+        import re
+        # Ambil judul dan link dari hasil HTML
+        titles = re.findall(r'class="result__a"[^>]*href="([^"]+)"[^>]*>([^<]+)<', r.text)
+        snippets = re.findall(r'class="result__snippet"[^>]*>([^<]+)<', r.text)
+
+        if not titles:
+            # Fallback: coba news search
+            return await tool_news_search(query)
+
+        lines = [f"*Hasil pencarian: '{query}'*\n"]
+        for i, ((link, title), snippet) in enumerate(zip(titles[:5], snippets[:5] + [""]*5), 1):
+            # Decode URL jika encoded
+            if link.startswith("/l/?"):
+                uddg = re.search(r'uddg=([^&]+)', link)
+                if uddg:
+                    import urllib.parse
+                    link = urllib.parse.unquote(uddg.group(1))
+            lines.append(
+                f"{i}. *{title.strip()}*\n"
+                f"   {snippet.strip()[:200]}\n"
+                f"   Link: {link}\n"
+            )
+        return "\n".join(lines)
 
     except Exception as e:
         return f"Error pencarian web: {str(e)}"
@@ -305,7 +333,9 @@ async def tool_read_url(url: str) -> str:
 
 
 async def execute_tool(name: str, args: dict) -> str:
-    if name == "web_search":
+    if name == "news_search":
+        return await tool_news_search(args.get("query", ""), args.get("language", "id"))
+    elif name == "web_search":
         return await tool_web_search(args.get("query", ""))
     elif name == "wikipedia_search":
         return await tool_wikipedia(args.get("topic", ""), args.get("language", "id"))
@@ -405,11 +435,12 @@ async def run_agent(user_id: int, user_message: str, update: Update, ctx: Contex
             # Tampilkan ke user tool apa yang dipakai
             await ctx.bot.send_chat_action(chat_id=update.effective_chat.id, action="typing")
             tool_status = {
-                "web_search": f"Mencari: _{tool_args.get('query', '')}_",
-                "wikipedia_search": f"Membaca Wikipedia: _{tool_args.get('topic', '')}_",
-                "calculator": f"Menghitung: `{tool_args.get('expression', '')}`",
-                "get_datetime": "Mengecek waktu...",
-                "read_url": f"Membaca: _{tool_args.get('url', '')}_",
+                "news_search":       f"Mencari berita: _{tool_args.get('query', '')}_",
+                "web_search":        f"Mencari web: _{tool_args.get('query', '')}_",
+                "wikipedia_search":  f"Membaca Wikipedia: _{tool_args.get('topic', '')}_",
+                "calculator":        f"Menghitung: `{tool_args.get('expression', '')}`",
+                "get_datetime":      "Mengecek waktu...",
+                "read_url":          f"Membaca: _{tool_args.get('url', '')}_",
             }
             status_msg = tool_status.get(tool_name, f"Menggunakan tool: `{tool_name}`")
             try:
