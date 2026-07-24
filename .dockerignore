@@ -1,0 +1,4 @@
+.git
+*.ps1
+deploy.ps1
+.gitignore
