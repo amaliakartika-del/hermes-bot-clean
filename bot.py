@@ -41,7 +41,8 @@ load_dotenv()
 TELEGRAM_TOKEN   = os.getenv("TELEGRAM_BOT_TOKEN", "")
 ALLOWED_USER_ID  = int(os.getenv("TELEGRAM_USER_ID", "0"))
 OPENROUTER_KEY   = os.getenv("OPENROUTER_API_KEY", "")
-MODEL            = os.getenv("HERMES_MODEL", "nousresearch/hermes-3-llama-3.1-405b")
+AI_BASE_URL      = os.getenv("AI_BASE_URL", "https://api.hcnsec.cn/v1")
+MODEL            = os.getenv("HERMES_MODEL", "gpt-4o")
 BOT_NAME         = os.getenv("BOT_NAME", "Hermes")
 GMAIL_EMAIL      = os.getenv("GMAIL_EMAIL", "")
 GMAIL_PASSWORD   = os.getenv("GMAIL_APP_PASSWORD", "")
@@ -60,22 +61,19 @@ logger = logging.getLogger(__name__)
 
 ai_client = AsyncOpenAI(
     api_key=OPENROUTER_KEY,
-    base_url="https://openrouter.ai/api/v1",
-    default_headers={
-        "HTTP-Referer": "https://github.com/amaliakartika-del/hermes-bot-clean",
-        "X-Title": "Hermes AI Agent",
-    }
+    base_url=AI_BASE_URL,
 )
 
 chat_history: dict[int, list[dict]] = {}
 
 MODELS = {
-    "1": ("nousresearch/hermes-3-llama-3.1-405b", "Hermes 3 405B (Terkuat)"),
-    "2": ("nousresearch/hermes-3-llama-3.1-70b",  "Hermes 3 70B (Seimbang)"),
-    "3": ("nousresearch/hermes-3-llama-3.1-8b",   "Hermes 3 8B (Cepat)"),
-    "4": ("nousresearch/deephermes-3-llama-3-8b-preview:free", "DeepHermes 3 (GRATIS)"),
+    "1": ("gpt-4o",          "GPT-4o (Terkuat)"),
+    "2": ("gpt-4o-mini",     "GPT-4o Mini (Cepat)"),
+    "3": ("gpt-3.5-turbo",   "GPT-3.5 Turbo (Hemat)"),
+    "4": ("claude-3-5-sonnet-20241022", "Claude 3.5 Sonnet"),
 }
 user_model: dict[int, str] = {}
+
 
 
 # ═══════════════════════════════════════════════
